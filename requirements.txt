@@ -1,0 +1,25 @@
+# === Core LangChain + LLM stack ===
+langchain==0.2.10
+langchain-community==0.2.10
+langchain-openai==0.1.7
+openai==1.40.0
+
+# === Vector Search + Embeddings ===
+faiss-cpu==1.8.0         # FAISS for vector indexing
+sentence-transformers==3.0.1  # for creating semantic embeddings
+tqdm==4.66.4              # progress bar for embedding loops
+numpy==1.26.4             # numerical ops
+pandas==2.2.2             # data handling
+
+# === Tokenization + Utility ===
+tiktoken==0.7.0
+python-dotenv==1.0.1
+
+# === Parsing + Document ingestion (optional extensions) ===
+PyMuPDF==1.24.1           # for PDF parsing if you later add RAG docs
+beautifulsoup4==4.12.3    # for HTML extraction
+requests==2.32.3          # for fetching external data
+
+# === CLI + system helpers ===
+argparse==1.4.0
+google-generativeai
