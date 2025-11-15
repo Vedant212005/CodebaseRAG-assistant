@@ -5,10 +5,6 @@ import json
 # ---------- Helper functions ----------
 
 def get_names_from_calls(node):
-    """
-    Extract names of all functions called inside this node.
-    Example: connect_to_db(), send_email() → ['connect_to_db', 'send_email']
-    """
     calls = []
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
@@ -20,18 +16,10 @@ def get_names_from_calls(node):
 
 
 def get_variable_names(node):
-    """
-    Extract variable identifiers used or defined in the function.
-    Example: balance, amount, conn
-    """
     return list({n.id for n in ast.walk(node) if isinstance(n, ast.Name)})
 
 
 def get_constants(node):
-    """
-    Extract literal constants (strings / ints / floats) appearing in code.
-    Example: 'Payment successful', 500
-    """
     consts = set()
     for c in ast.walk(node):
         if isinstance(c, ast.Constant) and isinstance(c.value, (str, int, float)):
@@ -41,7 +29,7 @@ def get_constants(node):
 # ---------- Core parser ----------
 
 def parse_python_file(file_path):
-    """Parse one .py file → list of structured code chunks (functions, classes)."""
+    """Parse one .py file into chunks."""
     with open(file_path, "r", encoding="utf-8") as f:
         source = f.read()
 
@@ -60,7 +48,6 @@ def parse_python_file(file_path):
             vars_ = get_variable_names(node)
             consts = get_constants(node)
 
-            # check if method (inside class)
             parent_class = None
             for parent in ast.walk(tree):
                 if isinstance(parent, ast.ClassDef) and node in parent.body:
@@ -68,11 +55,8 @@ def parse_python_file(file_path):
                     break
 
             kind = "method" if parent_class else "function"
-
-            # Fix: handle newline replacement *outside* f-string
             snippet = code[:250].replace('\n', ' ')
 
-            # -------- Build text for embeddings --------
             text_to_embed = f"""
             {kind.title()}: {node.name}
             Class: {parent_class or 'None'}
@@ -105,8 +89,6 @@ def parse_python_file(file_path):
             start, end = getattr(node, "lineno", 0), getattr(node, "end_lineno", 0)
             doc = ast.get_docstring(node)
             code = ast.get_source_segment(source, node) or ""
-
-            # Fix: handle newline replacement outside f-string
             snippet = code[:250].replace('\n', ' ')
 
             text_to_embed = f"""
@@ -140,20 +122,18 @@ if __name__ == "__main__":
 
     all_chunks = []
 
-    # Handle both single file and directory
     if os.path.isdir(args.path):
         for root, _, files in os.walk(args.path):
             for file in files:
                 if file.endswith(".py"):
                     fpath = os.path.join(root, file)
-                    print(f"🔍 Parsing {fpath} ...")
+                    print(f"[INFO] Parsing: {fpath}")
                     all_chunks.extend(parse_python_file(fpath))
     else:
         all_chunks.extend(parse_python_file(args.path))
 
-    # Save results to JSON
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(all_chunks, f, indent=2, ensure_ascii=False)
 
-    print(f"\n✅ Extracted {len(all_chunks)} code chunks.")
-    print(f"📁 Saved output → {args.out}")
+    print(f"[INFO] Extracted {len(all_chunks)} code chunks.")
+    print(f"[INFO] Saved output to {args.out}")

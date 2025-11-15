@@ -42,10 +42,15 @@ temp/
 # -------------------------
 # RAG Project generated files
 # -------------------------
-chunks.json
+code_chunks.json
 embeddings.npy
 code_index.faiss
 metadata.json
+
+# -------------------------
+# Cloned Repositories (do not push)
+# -------------------------
+cloned_repo/
 
 # -------------------------
 # Miscellaneous

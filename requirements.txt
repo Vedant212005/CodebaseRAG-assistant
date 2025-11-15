@@ -1,25 +1,32 @@
-# === Core LangChain + LLM stack ===
+# === Core LangChain + LLM Stack ===
 langchain==0.2.10
 langchain-community==0.2.10
 langchain-openai==0.1.7
 openai==1.40.0
+google-generativeai   # Gemini API
 
 # === Vector Search + Embeddings ===
-faiss-cpu==1.8.0         # FAISS for vector indexing
-sentence-transformers==3.0.1  # for creating semantic embeddings
-tqdm==4.66.4              # progress bar for embedding loops
-numpy==1.26.4             # numerical ops
-pandas==2.2.2             # data handling
+faiss-cpu==1.8.0
+sentence-transformers==3.0.1
+tqdm==4.66.4
+numpy==1.26.4
+pandas==2.2.2
 
-# === Tokenization + Utility ===
+# === Tokenization + Utils ===
 tiktoken==0.7.0
 python-dotenv==1.0.1
 
-# === Parsing + Document ingestion (optional extensions) ===
-PyMuPDF==1.24.1           # for PDF parsing if you later add RAG docs
-beautifulsoup4==4.12.3    # for HTML extraction
-requests==2.32.3          # for fetching external data
+# === Parsing + Data Extraction ===
+PyMuPDF==1.24.1
+beautifulsoup4==4.12.3
+requests==2.32.3
 
-# === CLI + system helpers ===
-argparse==1.4.0
-google-generativeai
+# === API Framework ===
+fastapi==0.111.0
+uvicorn==0.30.1
+
+# === GitHub Repo Cloning ===
+gitpython==3.1.43
+
+# === Optional / System Helpers ===
+# argparse --> REMOVED (built-in)
