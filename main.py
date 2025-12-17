@@ -1,50 +1,62 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from utils.repo_utils import clone_github_repo
-from utils.runner import run_ingest, run_build_vector
-
-import faiss
-import json
+# main.py
 import os
+import time
+import uuid
+import shutil
+import threading
+import json
+import faiss
+from fastapi import FastAPI, HTTPException, Request, Response
+from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+from utils.repo_utils import clone_github_repo
+from ingest import run_ingest
+from build_vector_index import build_vector_index
+
 # =====================
-# ENV & CONFIG
+# CONFIG
 # =====================
 load_dotenv()
 
-FAISS_FILE = "code_index.faiss"
-METADATA_FILE = "metadata.json"
-CHUNKS_FILE = "code_chunks.json"
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-TOP_K = 5
+import tempfile
+import os
 
+BASE_SESSION_DIR = os.path.join(tempfile.gettempdir(), "code_sessions")
+
+SESSION_TTL_SECONDS = 30 * 60  # 30 minutes
+TOP_K = 5
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+
+os.makedirs(BASE_SESSION_DIR, exist_ok=True)
+
+# =====================
+# GEMINI
+# =====================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY missing")
 
 genai.configure(api_key=GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 
 # =====================
 # APP INIT
 # =====================
 app = FastAPI(title="RAG CodeBase API")
 
-# =====================
-# LOAD MODELS (ONCE)
-# =====================
 embed_model = SentenceTransformer(MODEL_NAME)
-gemini_model = genai.GenerativeModel("gemini-2.5-flash")
-
-index = None
-metadata = None
-chunks_data = None
-
 
 # =====================
-# REQUEST SCHEMAS
+# SESSION CACHE
+# =====================
+SESSION_CACHE = {}
+CACHE_LOCK = threading.Lock()
+
+# =====================
+# REQUEST MODELS
 # =====================
 class RepoRequest(BaseModel):
     repo_url: str
@@ -52,71 +64,76 @@ class RepoRequest(BaseModel):
 class QueryRequest(BaseModel):
     query: str
 
+# =====================
+# SESSION HELPERS
+# =====================
+def get_or_create_session_id(request: Request, response: Response) -> str:
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            samesite="lax"
+        )
+    return session_id
+
+
+def session_dir(session_id: str) -> str:
+    return os.path.join(BASE_SESSION_DIR, f"session_{session_id}")
+
+
+def load_session_into_memory(session_id: str, sdir: str):
+    index = faiss.read_index(os.path.join(sdir, "code_index.faiss"))
+    metadata = json.load(open(os.path.join(sdir, "metadata.json")))
+    chunks = json.load(open(os.path.join(sdir, "code_chunks.json")))
+
+    SESSION_CACHE[session_id] = {
+        "index": index,
+        "metadata": metadata,
+        "chunks": chunks,
+        "last_access": time.time()
+    }
+
 
 # =====================
-# HELPERS
+# CLEANUP THREAD
 # =====================
-def load_vector_store():
-    global index, metadata, chunks_data
+def cleanup_sessions():
+    while True:
+        time.sleep(300)  # every 5 min
+        now = time.time()
 
-    if not os.path.exists(FAISS_FILE):
-        raise RuntimeError("FAISS index not found. Process a repo first.")
+        with CACHE_LOCK:
+            expired = [
+                sid for sid, data in SESSION_CACHE.items()
+                if now - data["last_access"] > SESSION_TTL_SECONDS
+            ]
 
-    index = faiss.read_index(FAISS_FILE)
-    metadata = json.load(open(METADATA_FILE, "r", encoding="utf-8"))
-    chunks_data = json.load(open(CHUNKS_FILE, "r", encoding="utf-8"))
+            for sid in expired:
+                SESSION_CACHE.pop(sid, None)
+                shutil.rmtree(session_dir(sid), ignore_errors=True)
 
-
-def build_context(query: str) -> str:
-    query_emb = embed_model.encode([query], normalize_embeddings=True).astype("float32")
-    D, I = index.search(query_emb, TOP_K)
-
-    selected_chunks = []
-    for idx in I[0]:
-        m = metadata[idx]
-        for c in chunks_data:
-            if c["file"] == m["file"] and c["name"] == m["name"]:
-                selected_chunks.append(c["code"])
-                break
-
-    if not selected_chunks:
-        return ""
-
-    return "\n\n".join(selected_chunks)
-
-
-def call_gemini(context: str, query: str) -> str:
-    prompt = f"""
-You are an expert code assistant.
-
-Here is the relevant code context retrieved from the repository:
-
-{context}
-
-User Question:
-{query}
-
-Answer clearly using ONLY the given code context.
-"""
-
-    response = gemini_model.generate_content(prompt)
-    return response.text
-
+threading.Thread(target=cleanup_sessions, daemon=True).start()
 
 # =====================
 # ROUTES
 # =====================
 @app.post("/process_repo")
-def process_repo(request: RepoRequest):
-    """
-    Clone repo and build FAISS index.
-    """
-    try:
-        repo_path = clone_github_repo(request.repo_url)
-        run_ingest(repo_path)
-        run_build_vector()
+def process_repo(request: Request, response: Response, body: RepoRequest):
+    session_id = get_or_create_session_id(request, response)
+    sdir = session_dir(session_id)
 
-        load_vector_store()  # reload index after processing
+    try:
+        shutil.rmtree(sdir, ignore_errors=True)
+        os.makedirs(sdir, exist_ok=True)
+
+        repo_path = clone_github_repo(body.repo_url, base_dir=sdir)
+        run_ingest(repo_path, out_file=os.path.join(sdir, "code_chunks.json"))
+        build_vector_index(sdir)
+
+        load_session_into_memory(session_id, sdir)
 
         return {"message": "Repository processed successfully"}
 
@@ -125,22 +142,45 @@ def process_repo(request: RepoRequest):
 
 
 @app.post("/query")
-def query_codebase(request: QueryRequest):
-    """
-    Query the processed repository using FAISS + Gemini.
-    """
-    try:
-        if index is None:
-            load_vector_store()
+def query_repo(request: Request, response: Response, body: QueryRequest):
+    session_id = get_or_create_session_id(request, response)
 
-        context = build_context(request.query)
+    with CACHE_LOCK:
+        if session_id not in SESSION_CACHE:
+            sdir = session_dir(session_id)
+            if not os.path.exists(sdir):
+                raise HTTPException(400, "No repository processed yet.")
+            load_session_into_memory(session_id, sdir)
 
-        if not context:
-            return {"response": "No relevant code found for this query."}
+        SESSION_CACHE[session_id]["last_access"] = time.time()
+        data = SESSION_CACHE[session_id]
 
-        answer = call_gemini(context, request.query)
+    query_emb = embed_model.encode(
+        [body.query],
+        normalize_embeddings=True
+    ).astype("float32")
 
-        return {"response": answer}
+    D, I = data["index"].search(query_emb, TOP_K)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    context = []
+    for idx in I[0]:
+        m = data["metadata"][idx]
+        for c in data["chunks"]:
+            if c["file"] == m["file"] and c["name"] == m["name"]:
+                context.append(c["code"])
+                break
+
+    if not context:
+        return {"response": "No relevant code found."}
+
+    prompt = f"""
+Use ONLY the code context below to answer.
+
+{chr(10).join(context)}
+
+Question:
+{body.query}
+"""
+
+    answer = gemini_model.generate_content(prompt).text
+    return {"response": answer}

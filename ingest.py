@@ -111,29 +111,23 @@ def parse_python_file(file_path):
     return results
 
 # ---------- Runner (single file or folder) ----------
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Parse Python codebase into structured code chunks.")
-    parser.add_argument("path", nargs="?", default=".", help="Path to a Python file or directory (default: current folder)")
-    parser.add_argument("--out", default="code_chunks.json", help="Output JSON file (default: code_chunks.json)")
-    args = parser.parse_args()
-
+def run_ingest(repo_path: str, out_file: str):
+    """
+    Parse all Python files in repo_path and write chunks to out_file.
+    This is session-safe and backend-callable.
+    """
     all_chunks = []
 
-    if os.path.isdir(args.path):
-        for root, _, files in os.walk(args.path):
+    if os.path.isdir(repo_path):
+        for root, _, files in os.walk(repo_path):
             for file in files:
                 if file.endswith(".py"):
                     fpath = os.path.join(root, file)
-                    print(f"[INFO] Parsing: {fpath}")
                     all_chunks.extend(parse_python_file(fpath))
     else:
-        all_chunks.extend(parse_python_file(args.path))
+        all_chunks.extend(parse_python_file(repo_path))
 
-    with open(args.out, "w", encoding="utf-8") as f:
+    with open(out_file, "w", encoding="utf-8") as f:
         json.dump(all_chunks, f, indent=2, ensure_ascii=False)
 
-    print(f"[INFO] Extracted {len(all_chunks)} code chunks.")
-    print(f"[INFO] Saved output to {args.out}")
+
