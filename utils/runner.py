@@ -32,16 +32,3 @@ def run_build_vector():
         )
 
 
-def run_query_search(query: str):
-    result = subprocess.run(
-        [PYTHON, "query_search.py", query],
-        capture_output=True,
-        text=True
-    )
-
-    if result.returncode != 0:
-        raise Exception(
-            f"query_search.py failed:\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
-        )
-
-    return result.stdout.strip()
