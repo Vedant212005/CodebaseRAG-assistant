@@ -1,35 +1,45 @@
 # -------------------------
-# Python cache & build files
+# Frontend - Node.js
 # -------------------------
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-build/
-dist/
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+frontend/build/
 
 # -------------------------
-# Virtual environments
+# Backend - Python cache & build files
 # -------------------------
-venv/
-.venv/
-ENV/
-env/
-env.bak/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/*.egg-info/
+backend/build/
+backend/dist/
 
 # -------------------------
-# Editor / IDE settings
+# Backend - Virtual environments
+# -------------------------
+backend/venv/
+backend/.venv/
+backend/ENV/
+backend/env/
+
+# -------------------------
+# Backend - Environment & Secrets
+# -------------------------
+backend/.env
+backend/.env.local
+backend/.env.*.local
+
+# -------------------------
+# Editor / IDE settings (root only)
 # -------------------------
 .vscode/
+/.vscode/
 .idea/
 *.swp
 .DS_Store
-
-# -------------------------
-# Environment / Secrets
-# -------------------------
-.env
 
 # -------------------------
 # Logs / Temporary files
@@ -46,6 +56,7 @@ code_chunks.json
 embeddings.npy
 code_index.faiss
 metadata.json
+*.index
 
 # -------------------------
 # Cloned Repositories (do not push)
@@ -55,5 +66,8 @@ cloned_repo/
 # -------------------------
 # Miscellaneous
 # -------------------------
-__pycache__/
 .ipynb_checkpoints/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg/

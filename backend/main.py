@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 from utils.repo_utils import clone_github_repo
 from ingest import run_ingest
 from build_vector_index import build_vector_index
+from fastapi.middleware.cors import CORSMiddleware
+
 
 # =====================
 # CONFIG
@@ -46,6 +48,14 @@ gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 # APP INIT
 # =====================
 app = FastAPI(title="RAG CodeBase API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 embed_model = SentenceTransformer(MODEL_NAME)
 
